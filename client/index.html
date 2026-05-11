@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude Code Control</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Theme variables ── */
+
+    :root {
+      --bg-base:    #0d1117;
+      --bg-overlay: #161b22;
+      --bg-hover:   #1c2128;
+      --bg-el:      #21262d;
+      --border:        #21262d;
+      --border-strong: #30363d;
+      --text:        #f0f6fc;
+      --text-2:      #c9d1d9;
+      --text-muted:  #8b949e;
+      --text-subtle: #6e7681;
+      --text-faint:  #484f58;
+      --accent:       #388bfd;
+      --accent-text:  #58a6ff;
+      --accent-bg:    #1f3a5f;
+      --accent-bg-hover: #263d5e;
+      --accent-subtle: rgba(88,166,255,0.1);
+      --green:  #3fb950;
+      --yellow: #d29922;
+      --red:    #f85149;
+      --badge-running-bg:  rgba(63,185,80,0.15);
+      --badge-exited-bg:   rgba(72,79,88,0.3);
+      --badge-starting-bg: rgba(210,153,34,0.15);
+      --dot-glow:   0 0 5px rgba(63,185,80,0.5);
+      --error-bg:   rgba(248,81,73,0.08);
+      --danger-subtle: rgba(248,81,73,0.1);
+      --primary-border: rgba(240,246,252,0.1);
+      --overlay-modal:    rgba(1,4,9,0.75);
+      --overlay-backdrop: rgba(1,4,9,0.6);
+      --shadow-lg: 0 16px 48px rgba(1,4,9,0.7);
+      --shadow-xl: 0 24px 60px rgba(1,4,9,0.8);
+    }
+
+    body[data-theme="light"] {
+      --bg-base:    #ffffff;
+      --bg-overlay: #f6f8fa;
+      --bg-hover:   #eaeef2;
+      --bg-el:      #eaeef2;
+      --border:        #d8dee4;
+      --border-strong: #afb8c1;
+      --text:        #1f2328;
+      --text-2:      #24292f;
+      --text-muted:  #57606a;
+      --text-subtle: #6e7781;
+      --text-faint:  #8c959f;
+      --accent:       #0969da;
+      --accent-text:  #0969da;
+      --accent-bg:    rgba(9,105,218,0.08);
+      --accent-bg-hover: rgba(9,105,218,0.12);
+      --accent-subtle: rgba(9,105,218,0.1);
+      --green:  #1a7f37;
+      --yellow: #9a6700;
+      --red:    #cf222e;
+      --badge-running-bg:  rgba(26,127,55,0.12);
+      --badge-exited-bg:   rgba(110,120,129,0.2);
+      --badge-starting-bg: rgba(154,103,0,0.12);
+      --dot-glow:   0 0 5px rgba(26,127,55,0.4);
+      --error-bg:   rgba(207,34,46,0.08);
+      --danger-subtle: rgba(207,34,46,0.1);
+      --primary-border: rgba(31,35,40,0.15);
+      --overlay-modal:    rgba(1,4,9,0.4);
+      --overlay-backdrop: rgba(1,4,9,0.3);
+      --shadow-lg: 0 16px 48px rgba(1,4,9,0.15);
+      --shadow-xl: 0 24px 60px rgba(1,4,9,0.2);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-base);
+      color: var(--text-2);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      background: var(--bg-overlay);
+      border-bottom: 1px solid var(--border);
+      padding: 0 16px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      gap: 12px;
+    }
+
+    header h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.3px;
+    }
+
+    header h1 span { color: #f78166; }
+
+    #global-stats {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--text-faint);
+      font-variant-numeric: tabular-nums;
+    }
+
+    #theme-toggle {
+      background: transparent;
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 13px;
+      padding: 2px 7px;
+      line-height: 1.4;
+      transition: background 0.15s, color 0.15s;
+      flex-shrink: 0;
+    }
+    #theme-toggle:hover { background: var(--bg-el); color: var(--text-2); }
+
+    .main-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+
+    #sidebar {
+      width: 230px;
+      background: var(--bg-overlay);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header span {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .btn-new {
+      background: var(--bg-el);
+      color: var(--text-2);
+      border: 1px solid var(--border-strong);
+      padding: 3px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .btn-new:hover { background: var(--border-strong); border-color: var(--text-muted); }
+
+    .sidebar-search {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .sidebar-search input {
+      width: 100%;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 4px 8px;
+      color: var(--text-2);
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .sidebar-search input:focus { border-color: var(--accent); }
+    .sidebar-search input::placeholder { color: var(--text-faint); }
+
+    #sidebar-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+
+    #sidebar-scroll::-webkit-scrollbar { width: 4px; }
+    #sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+    #sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+    /* ── Session items ── */
+
+    .session-item {
+      display: flex;
+      align-items: center;
+      padding: 7px 8px 7px 12px;
+      cursor: pointer;
+      margin: 1px 6px;
+      border-radius: 6px;
+      gap: 8px;
+      font-size: 13px;
+      transition: background 0.1s;
+      border: 1px solid transparent;
+    }
+
+    .session-item:hover { background: var(--bg-hover); }
+    .session-item.active { background: var(--bg-hover); border-color: var(--border-strong); }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-dot.running  { background: var(--green); box-shadow: var(--dot-glow); }
+    .status-dot.exited   { background: var(--text-faint); }
+    .status-dot.starting { background: var(--yellow); }
+    .status-dot.error    { background: var(--red); }
+
+    .session-info {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .session-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-2);
+    }
+
+    .session-item.active .session-name { color: var(--text); }
+
+    .session-tokens {
+      font-size: 10px;
+      color: var(--text-faint);
+      margin-top: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .session-actions {
+      display: flex;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .session-action-btn {
+      opacity: 0;
+      font-size: 14px;
+      line-height: 1;
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: opacity 0.1s;
+      color: var(--text-subtle);
+    }
+
+    .session-item:hover .session-action-btn { opacity: 1; }
+    .session-restart:hover { color: var(--accent-text); background: var(--accent-subtle); }
+    .session-close:hover  { color: var(--red); background: var(--danger-subtle); }
+
+    /* ── Discovered section ── */
+
+    .sidebar-divider {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-faint);
+      font-weight: 600;
+      padding: 8px 12px 4px;
+      border-top: 1px solid var(--border);
+      margin-top: 4px;
+    }
+
+    #discovered-section { display: none; }
+
+    .discovered-item {
+      display: flex;
+      align-items: center;
+      padding: 6px 8px 6px 12px;
+      margin: 1px 6px;
+      border-radius: 6px;
+      gap: 6px;
+      font-size: 12px;
+    }
+
+    .discovered-icon { color: var(--yellow); font-size: 11px; flex-shrink: 0; }
+
+    .discovered-info { flex: 1; overflow: hidden; }
+
+    .discovered-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-2);
+    }
+
+    .discovered-pid { font-size: 10px; color: var(--text-faint); margin-top: 1px; }
+
+    .btn-import {
+      background: var(--bg-el);
+      color: var(--accent-text);
+      border: 1px solid var(--border-strong);
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+
+    .btn-import:hover { background: var(--border-strong); }
+
+    /* ── Main pane ── */
+
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #terminal-header {
+      padding: 7px 14px;
+      background: var(--bg-overlay);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-muted);
+      display: none;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    #terminal-dir {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #terminal-status-badge {
+      font-size: 11px;
+      padding: 1px 8px;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+
+    #terminal-status-badge.running  { background: var(--badge-running-bg);  color: var(--green); }
+    #terminal-status-badge.exited   { background: var(--badge-exited-bg);    color: var(--text-muted); }
+    #terminal-status-badge.starting { background: var(--badge-starting-bg); color: var(--yellow); }
+
+    /* ── Slash toolbar ── */
+
+    #slash-toolbar {
+      display: none;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 12px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .slash-btn {
+      background: var(--bg-overlay);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      padding: 2px 9px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', 'Fira Code', Menlo, monospace;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+    }
+
+    .slash-btn:hover { background: var(--bg-el); color: var(--text-2); border-color: var(--border-strong); }
+
+    /* ── Terminal ── */
+
+    #terminal-container {
+      flex: 1;
+      overflow: hidden;
+      padding: 4px;
+      background: var(--bg-base);
+    }
+
+    #terminal-container .xterm { height: 100%; }
+
+    .empty-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .empty-state .icon { font-size: 36px; opacity: 0.2; }
+    .empty-state p { font-size: 14px; color: var(--text-faint); }
+
+    .btn-primary {
+      background: #238636;
+      color: #f0f6fc;
+      border: 1px solid var(--primary-border);
+      padding: 6px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+
+    .btn-primary:hover { background: #2ea043; }
+
+    /* ── Modal ── */
+
+    #modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--overlay-modal);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #modal-overlay.open { display: flex; }
+
+    #modal {
+      background: var(--bg-overlay);
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      padding: 24px;
+      width: 440px;
+      max-width: 92vw;
+      box-shadow: var(--shadow-lg);
+    }
+
+    #modal h2 { font-size: 16px; font-weight: 600; margin-bottom: 18px; color: var(--text); }
+
+    .form-group { margin-bottom: 14px; }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    .form-group input {
+      width: 100%;
+      background: var(--bg-base);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: var(--text-2);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .form-group input:focus { border-color: var(--accent); }
+    .form-group input::placeholder { color: var(--text-faint); }
+
+    .dir-input-row { display: flex; gap: 6px; }
+    .dir-input-row input { flex: 1; }
+
+    .btn-browse {
+      background: var(--bg-el);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      padding: 0 10px;
+      cursor: pointer;
+      font-size: 15px;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+
+    .btn-browse:hover { background: var(--border-strong); }
+
+    #history-toggle {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--accent-text);
+      cursor: pointer;
+      display: inline-block;
+    }
+
+    #history-toggle:hover { text-decoration: underline; }
+
+    #history-panel {
+      display: none;
+      margin-top: 8px;
+      background: var(--bg-base);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      overflow: hidden;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+
+    #history-panel::-webkit-scrollbar { width: 4px; }
+    #history-panel::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 10px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      transition: background 0.1s;
+    }
+
+    .history-item:last-child { border-bottom: none; }
+    .history-item:hover { background: var(--bg-hover); }
+
+    .history-date { color: var(--text-2); }
+    .history-size { color: var(--text-faint); font-size: 11px; }
+    .history-empty { padding: 12px; text-align: center; color: var(--text-faint); font-size: 12px; }
+
+    #error-msg {
+      color: var(--red);
+      font-size: 12px;
+      margin-top: 10px;
+      display: none;
+      padding: 8px 10px;
+      background: var(--error-bg);
+      border-radius: 6px;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 18px;
+    }
+
+    .btn-cancel {
+      background: var(--bg-el);
+      color: var(--text-2);
+      border: 1px solid var(--border-strong);
+      padding: 6px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+
+    .btn-cancel:hover { background: var(--border-strong); }
+
+    /* ── Prompt bar ── */
+
+    #prompt-bar {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    #prompt-input {
+      flex: 1;
+      background: var(--bg-overlay);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 10px;
+      color: var(--text-2);
+      font-size: 12px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    #prompt-input:focus { border-color: var(--accent); }
+    #prompt-input::placeholder { color: var(--text-faint); }
+
+    .btn-send {
+      background: var(--accent-bg);
+      color: var(--accent-text);
+      border: 1px solid var(--accent);
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      flex-shrink: 0;
+      transition: background 0.12s;
+    }
+
+    .btn-send:hover { background: var(--accent-bg-hover); }
+
+    /* ── Terminal body (row: terminal + chat panel) ── */
+
+    #terminal-body {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Conversation panel ── */
+
+    #conversation-panel {
+      display: none;
+      width: 340px;
+      min-width: 260px;
+      max-width: 40%;
+      background: var(--bg-overlay);
+      border-left: 1px solid var(--border);
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .conv-header {
+      padding: 8px 12px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .conv-close {
+      cursor: pointer;
+      color: var(--text-subtle);
+      font-size: 16px;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+
+    .conv-close:hover { color: var(--text-2); background: var(--bg-el); }
+
+    .conv-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .conv-messages::-webkit-scrollbar { width: 4px; }
+    .conv-messages::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+    .conv-bubble {
+      max-width: 90%;
+      margin-bottom: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .conv-bubble.user {
+      background: var(--accent-bg);
+      margin-left: auto;
+      border-bottom-right-radius: 2px;
+    }
+
+    .conv-bubble.assistant {
+      background: var(--bg-hover);
+      margin-right: auto;
+      border-bottom-left-radius: 2px;
+    }
+
+    .conv-text { color: var(--text-2); white-space: pre-wrap; }
+
+    .conv-tool-call { margin-top: 6px; font-size: 11px; }
+
+    .conv-tool-call summary {
+      cursor: pointer;
+      color: var(--yellow);
+      padding: 2px 0;
+      user-select: none;
+      list-style: none;
+    }
+
+    .conv-tool-call summary::before { content: '⚙ '; }
+    .conv-tool-call summary::-webkit-details-marker { display: none; }
+
+    .conv-tool-call pre {
+      margin-top: 4px;
+      padding: 6px 8px;
+      background: var(--bg-base);
+      border-radius: 4px;
+      color: var(--text-muted);
+      font-size: 10px;
+      overflow-x: auto;
+      max-height: 120px;
+      white-space: pre-wrap;
+    }
+
+    .conv-timestamp { font-size: 10px; color: var(--text-faint); margin-top: 4px; }
+
+    .conv-loading, .conv-empty {
+      padding: 24px;
+      text-align: center;
+      color: var(--text-faint);
+      font-size: 12px;
+    }
+
+    .btn-chat {
+      background: var(--bg-el);
+      color: var(--text-muted);
+      border: 1px solid var(--border-strong);
+      padding: 2px 9px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: background 0.12s, color 0.12s;
+      margin-left: 4px;
+      flex-shrink: 0;
+    }
+
+    .btn-chat:hover { background: var(--border-strong); color: var(--text-2); }
+    .btn-chat.active { background: var(--accent-subtle); color: var(--accent-text); border-color: var(--accent); }
+
+    /* ── Auto-restart toggle in sidebar ── */
+
+    .session-auto-restart { color: var(--text-faint); }
+    .session-auto-restart.on { opacity: 1 !important; color: var(--accent-text); }
+
+    /* ── Command palette ── */
+
+    #palette-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--overlay-backdrop);
+      backdrop-filter: blur(2px);
+      z-index: 120;
+      justify-content: center;
+      align-items: flex-start;
+      padding-top: 14vh;
+    }
+    #palette-overlay.open { display: flex; }
+
+    #palette {
+      width: 600px;
+      max-width: 92vw;
+      background: var(--bg-overlay);
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      box-shadow: var(--shadow-xl);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #palette-search {
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      padding: 14px 18px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      font-family: 'JetBrains Mono', 'Fira Code', Menlo, monospace;
+    }
+    #palette-search::placeholder { color: var(--text-faint); }
+
+    #palette-list {
+      flex: 1;
+      max-height: 50vh;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+    #palette-list::-webkit-scrollbar { width: 4px; }
+    #palette-list::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+    .palette-row {
+      display: flex;
+      align-items: center;
+      padding: 9px 18px;
+      gap: 12px;
+      cursor: pointer;
+      border-left: 2px solid transparent;
+    }
+    .palette-row:hover { background: var(--bg-hover); }
+    .palette-row.selected { background: var(--bg-hover); border-left-color: var(--accent); }
+
+    .palette-row-info { flex: 1; overflow: hidden; }
+    .palette-name {
+      font-size: 13px;
+      color: var(--text);
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .palette-meta {
+      font-size: 11px;
+      color: var(--text-subtle);
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: 'JetBrains Mono', 'Fira Code', Menlo, monospace;
+    }
+
+    .palette-actions { display: flex; gap: 4px; opacity: 0; flex-shrink: 0; }
+    .palette-row:hover .palette-actions,
+    .palette-row.selected .palette-actions { opacity: 1; }
+
+    .palette-action {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .palette-action:hover { background: var(--bg-el); color: var(--text-2); border-color: var(--border-strong); }
+    .palette-action.delete:hover { color: var(--red); border-color: var(--red); }
+
+    .palette-empty {
+      padding: 28px;
+      text-align: center;
+      color: var(--text-faint);
+      font-size: 12px;
+    }
+
+    #palette-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-base);
+    }
+
+    .palette-hint {
+      font-size: 10px;
+      color: var(--text-faint);
+      font-family: 'JetBrains Mono', 'Fira Code', Menlo, monospace;
+    }
+
+    .palette-new {
+      background: var(--bg-el);
+      color: var(--text-2);
+      border: 1px solid var(--border-strong);
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .palette-new:hover { background: var(--border-strong); border-color: var(--accent-text); color: var(--accent-text); }
+
+    /* ── Template editor ── */
+
+    #template-editor-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--overlay-modal);
+      z-index: 130;
+      align-items: center;
+      justify-content: center;
+    }
+    #template-editor-overlay.open { display: flex; }
+
+    #template-editor {
+      background: var(--bg-overlay);
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      padding: 22px;
+      width: 520px;
+      max-width: 92vw;
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .te-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .te-header h2 { font-size: 16px; font-weight: 600; color: var(--text); }
+    .te-close {
+      cursor: pointer;
+      color: var(--text-subtle);
+      font-size: 20px;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .te-close:hover { color: var(--text-2); background: var(--bg-el); }
+
+    #template-editor label {
+      display: flex;
+      flex-direction: column;
+      font-size: 12px;
+      color: var(--text-muted);
+      gap: 6px;
+      font-weight: 500;
+    }
+
+    #template-editor input,
+    #template-editor textarea {
+      background: var(--bg-base);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: var(--text-2);
+      font-size: 13px;
+      outline: none;
+      font-family: inherit;
+      transition: border-color 0.15s;
+      resize: vertical;
+    }
+    #template-editor input:focus,
+    #template-editor textarea:focus { border-color: var(--accent); }
+    #template-editor input::placeholder,
+    #template-editor textarea::placeholder { color: var(--text-faint); }
+
+    .te-dir-row { display: flex; gap: 6px; }
+    .te-dir-row input { flex: 1; }
+    .te-dir-row button {
+      background: var(--bg-el);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      padding: 0 10px;
+      cursor: pointer;
+      font-size: 14px;
+      color: var(--text-2);
+      flex-shrink: 0;
+    }
+    .te-dir-row button:hover { background: var(--border-strong); }
+
+    #te-error {
+      color: var(--red);
+      font-size: 12px;
+      display: none;
+      padding: 6px 10px;
+      background: var(--error-bg);
+      border-radius: 6px;
+    }
+
+    .te-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span>◆</span> Claude Code Control</h1>
+    <span id="global-stats"></span>
+    <button id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">☀</button>
+  </header>
+
+  <div class="main-layout">
+    <div id="sidebar">
+      <div class="sidebar-header">
+        <span>Sessions</span>
+        <button class="btn-new" onclick="openNewModal()">+ New</button>
+      </div>
+      <div class="sidebar-search">
+        <input type="text" id="session-search" placeholder="Search sessions…" oninput="filterSessions(this.value)" />
+      </div>
+      <div id="sidebar-scroll">
+        <div id="session-list"></div>
+
+        <!-- Discovered: running claude processes not managed by Claude Code Control -->
+        <div id="discovered-section">
+          <div class="sidebar-divider">Discovered</div>
+          <div id="discovered-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="main">
+      <div id="terminal-header">
+        <span id="terminal-dir"></span>
+        <span id="terminal-status-badge"></span>
+        <button class="btn-chat" id="chat-toggle-btn" onclick="toggleConversation()">Chat</button>
+      </div>
+
+      <!-- Slash command toolbar -->
+      <div id="slash-toolbar">
+        <button class="slash-btn" onclick="sendSlash('compact')">/compact</button>
+        <button class="slash-btn" onclick="sendSlash('clear')">/clear</button>
+        <button class="slash-btn" onclick="sendSlash('model')">/model</button>
+        <button class="slash-btn" onclick="sendSlash('ultraplan')">/ultraplan</button>
+      </div>
+
+      <!-- Prompt bar -->
+      <div id="prompt-bar">
+        <input type="text" id="prompt-input" placeholder="Type a prompt and press Enter…" />
+        <button class="btn-send" onclick="sendPrompt()">Send</button>
+      </div>
+
+      <div id="terminal-body">
+        <div id="terminal-container">
+          <div class="empty-state" id="empty-state">
+            <div class="icon">⌗</div>
+            <p>No session selected</p>
+            <button class="btn-primary" onclick="openNewModal()">+ New Session</button>
+          </div>
+        </div>
+
+        <!-- Conversation history panel -->
+        <div id="conversation-panel">
+          <div class="conv-header">
+            <span>Conversation</span>
+            <span class="conv-close" onclick="toggleConversation()">×</span>
+          </div>
+          <div class="conv-messages" id="conv-messages"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Session Modal -->
+  <div id="modal-overlay">
+    <div id="modal">
+      <h2>New Session</h2>
+      <div class="form-group">
+        <label>Project Directory</label>
+        <div class="dir-input-row">
+          <input type="text" id="input-dir" placeholder="/path/to/your/project" />
+          <button class="btn-browse" onclick="pickFolder()" title="Choose folder">📁</button>
+        </div>
+        <span id="history-toggle" onclick="loadHistory()">Show recent sessions →</span>
+        <div id="history-panel">
+          <div id="history-list"></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Session Name <span style="color:var(--text-faint);font-weight:400">(optional)</span></label>
+        <input type="text" id="input-name" placeholder="Defaults to directory name" />
+      </div>
+      <div id="error-msg"></div>
+      <div class="form-actions">
+        <button class="btn-cancel" onclick="closeNewModal()">Cancel</button>
+        <button class="btn-primary" onclick="createSession()">Create Session</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Command palette (Cmd/Ctrl+K) -->
+  <div id="palette-overlay">
+    <div id="palette">
+      <input id="palette-search" placeholder="Search templates…  (Esc to close)" autocomplete="off" spellcheck="false" />
+      <div id="palette-list"></div>
+      <div id="palette-footer">
+        <span class="palette-hint">↑↓ navigate · ↵ launch · ⌫ delete · Alt+[ ] switch session</span>
+        <button class="palette-new" onclick="openTemplateEditor()">+ New template</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Template editor (new/edit) -->
+  <div id="template-editor-overlay">
+    <div id="template-editor">
+      <div class="te-header">
+        <h2 id="te-title">New Template</h2>
+        <span class="te-close" onclick="closeTemplateEditor()">×</span>
+      </div>
+      <label>Name
+        <input type="text" id="te-name" maxlength="80" placeholder="e.g. Run E2E tests" />
+      </label>
+      <label>Directory
+        <div class="te-dir-row">
+          <input type="text" id="te-dir" placeholder="/absolute/path/to/project" />
+          <button type="button" onclick="pickTemplateDir()" title="Choose folder">📁</button>
+        </div>
+      </label>
+      <label>Prompt
+        <textarea id="te-prompt" rows="5" placeholder="What Claude should do when this template runs…"></textarea>
+      </label>
+      <div id="te-error"></div>
+      <div class="te-actions">
+        <button class="btn-cancel" onclick="closeTemplateEditor()">Cancel</button>
+        <button class="btn-primary" onclick="saveTemplate()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+  <script src="terminal.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
