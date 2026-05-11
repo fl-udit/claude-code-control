@@ -105,6 +105,11 @@ const wasRunning = sessionStore.load();
 for (const sessionId of wasRunning) {
   const session = sessionStore.get(sessionId);
   if (!session) continue;
+  // Kill the orphaned process from the previous server run so it doesn't
+  // appear in the discovered-sessions list after the new one is spawned.
+  if (session.pid) {
+    try { process.kill(session.pid, 'SIGTERM'); } catch (_) {}
+  }
   try {
     const pid = ptyManager.spawn(sessionId, session.dir, ['--continue']);
     sessionStore.update(sessionId, { pid, status: 'running' });

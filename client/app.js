@@ -276,7 +276,7 @@ function renderDiscovered(discovered) {
 
 async function importProcess(pid, dir, claudeSessionId) {
   if (!dir) { alert('Cannot determine working directory for this process'); return; }
-  const body = { dir, name: dir.split('/').pop() };
+  const body = { dir, name: dir.split('/').pop(), existingPid: pid };
   if (claudeSessionId) body.resume = claudeSessionId;
   const res = await fetch('/api/sessions', {
     method: 'POST',

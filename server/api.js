@@ -43,9 +43,15 @@ router.get('/sessions', (req, res) => {
 });
 
 router.post('/sessions', (req, res) => {
-  const { dir, name, resume } = req.body;
+  const { dir, name, resume, existingPid } = req.body;
   if (!dir) return res.status(400).json({ error: 'dir is required' });
   if (!fs.existsSync(dir)) return res.status(400).json({ error: 'Directory does not exist' });
+
+  // When adopting a discovered process, kill the original so it doesn't keep
+  // running alongside the new session.
+  if (existingPid) {
+    try { process.kill(Number(existingPid), 'SIGTERM'); } catch (_) {}
+  }
 
   const session = sessionStore.create(dir, name);
   const flags = resume ? ['--resume', resume] : [];
