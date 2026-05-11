@@ -9,17 +9,20 @@ const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const sessions = new Map();
 
 function load() {
+  const wasRunning = [];
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     if (fs.existsSync(SESSIONS_FILE)) {
       const data = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8'));
       for (const session of data) {
+        if (session.status === 'running') wasRunning.push(session.id);
         sessions.set(session.id, { ...session, status: 'exited' });
       }
     }
   } catch (e) {
     console.error('Failed to load sessions:', e.message);
   }
+  return wasRunning;
 }
 
 function save() {

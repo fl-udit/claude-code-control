@@ -326,14 +326,56 @@ async function refreshStats() {
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
+let browseCallbackTarget = null;
+let browseCurrentPath = '';
+
 async function pickFolder() {
-  const res = await fetch('/api/pick-folder');
-  if (!res.ok) return;
-  const { path } = await res.json();
-  document.getElementById('input-dir').value = path;
-  document.getElementById('input-name').focus();
-  document.getElementById('history-panel').style.display = 'none';
-  loadHistory(); // auto-show history for the picked folder
+  browseCallbackTarget = 'input-dir';
+  openBrowseModal();
+}
+
+async function openBrowseModal() {
+  document.getElementById('browse-modal-overlay').style.display = 'flex';
+  document.getElementById('browse-manual').value = '';
+  browseCurrentPath = '';
+  await browseTo('/');
+}
+
+function closeBrowseModal() {
+  document.getElementById('browse-modal-overlay').style.display = 'none';
+}
+
+async function browseTo(dir) {
+  browseCurrentPath = dir;
+  try {
+    const res = await fetch(`/api/browse?path=${encodeURIComponent(dir)}`);
+    if (!res.ok) throw new Error('Failed to load directory');
+    const { path, dirs } = await res.json();
+    document.getElementById('browse-path').textContent = path;
+    const list = document.getElementById('browse-list');
+    list.innerHTML = dirs.map(d => `
+      <div class="browse-item" onclick="browseTo('${d.path.replace(/'/g, "\\'")}')">
+        📁 ${d.name}
+      </div>
+    `).join('');
+  } catch (err) {
+    document.getElementById('browse-list').innerHTML = `<div style="padding: 12px; color: var(--text-faint);">${err.message}</div>`;
+  }
+}
+
+function confirmBrowseSelection() {
+  const manual = document.getElementById('browse-manual').value.trim();
+  const selected = manual || browseCurrentPath;
+  if (!selected) return alert('Please select or type a directory');
+  if (browseCallbackTarget) {
+    document.getElementById(browseCallbackTarget).value = selected;
+  }
+  closeBrowseModal();
+  if (browseCallbackTarget === 'input-dir') {
+    document.getElementById('input-name').focus();
+    document.getElementById('history-panel').style.display = 'none';
+    loadHistory();
+  }
 }
 
 function openNewModal() {
@@ -720,12 +762,8 @@ function isTemplateEditorOpen() {
 }
 
 async function pickTemplateDir() {
-  try {
-    const res = await fetch('/api/pick-folder');
-    if (!res.ok) return;
-    const { path } = await res.json();
-    document.getElementById('te-dir').value = path;
-  } catch (_) {}
+  browseCallbackTarget = 'te-dir';
+  openBrowseModal();
 }
 
 async function saveTemplate() {

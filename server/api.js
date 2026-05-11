@@ -19,6 +19,23 @@ router.get('/pick-folder', (req, res) => {
   });
 });
 
+// ── Directory browser (for Docker/non-macOS environments) ──────────────────────
+
+router.get('/browse', (req, res) => {
+  let dir = req.query.path || os.homedir();
+  try {
+    if (!fs.existsSync(dir)) dir = os.homedir();
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const dirs = entries
+      .filter(e => e.isDirectory())
+      .map(e => ({ name: e.name, path: path.join(dir, e.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json({ path: dir, dirs });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ── Session CRUD ─────────────────────────────────────────────────────────────
 
 router.get('/sessions', (req, res) => {
