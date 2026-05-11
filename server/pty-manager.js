@@ -1,4 +1,6 @@
 const pty = require('node-pty');
+const fs = require('fs');
+const path = require('path');
 const os = require('os');
 const { EventEmitter } = require('events');
 
@@ -7,7 +9,16 @@ emitter.setMaxListeners(200);
 
 const ptys = new Map();
 const outputBuffers = new Map(); // sessionId -> string (last ~100KB of output)
+const bufferSaveTimers = new Map();
 const BUFFER_LIMIT = 100 * 1024;
+const BUFFERS_DIR = path.join(os.homedir(), '.claude-code-control', 'buffers');
+
+function saveBufferToDisk(sessionId) {
+  try {
+    fs.mkdirSync(BUFFERS_DIR, { recursive: true });
+    fs.writeFileSync(path.join(BUFFERS_DIR, sessionId), outputBuffers.get(sessionId) || '');
+  } catch (_) {}
+}
 
 // Augment PATH with common user binary locations so claude is discoverable
 const augmentedEnv = {
@@ -32,13 +43,21 @@ function spawn(sessionId, dir, flags = []) {
 
   ptys.set(sessionId, ptyProcess);
 
-  outputBuffers.set(sessionId, '');
+  const diskBuffer = (() => {
+    try {
+      const p = path.join(BUFFERS_DIR, sessionId);
+      return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
+    } catch (_) { return ''; }
+  })();
+  outputBuffers.set(sessionId, diskBuffer);
 
   ptyProcess.onData((data) => {
     let buf = (outputBuffers.get(sessionId) || '') + data;
     if (buf.length > BUFFER_LIMIT) buf = buf.slice(buf.length - BUFFER_LIMIT);
     outputBuffers.set(sessionId, buf);
     emitter.emit(`data:${sessionId}`, data);
+    if (bufferSaveTimers.has(sessionId)) clearTimeout(bufferSaveTimers.get(sessionId));
+    bufferSaveTimers.set(sessionId, setTimeout(() => saveBufferToDisk(sessionId), 1000));
   });
 
   ptyProcess.onExit(({ exitCode }) => {
@@ -76,6 +95,14 @@ function getBuffer(sessionId) {
 }
 
 function clearBuffer(sessionId) {
+  if (bufferSaveTimers.has(sessionId)) {
+    clearTimeout(bufferSaveTimers.get(sessionId));
+    bufferSaveTimers.delete(sessionId);
+  }
+  try {
+    const p = path.join(BUFFERS_DIR, sessionId);
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch (_) {}
   outputBuffers.delete(sessionId);
 }
 

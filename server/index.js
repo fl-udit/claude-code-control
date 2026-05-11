@@ -101,7 +101,18 @@ wss.on('connection', (ws, req, sessionId) => {
   });
 });
 
-sessionStore.load();
+const wasRunning = sessionStore.load();
+for (const sessionId of wasRunning) {
+  const session = sessionStore.get(sessionId);
+  if (!session) continue;
+  try {
+    const pid = ptyManager.spawn(sessionId, session.dir, ['--continue']);
+    sessionStore.update(sessionId, { pid, status: 'running' });
+    console.log(`  ↺  Resumed: ${session.name}`);
+  } catch (e) {
+    console.error(`  ✗  Failed to resume ${session.name}:`, e.message);
+  }
+}
 
 server.listen(PORT, () => {
   console.log(`\nClaude Code Control → http://localhost:${PORT}\n`);

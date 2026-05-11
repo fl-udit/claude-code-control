@@ -505,6 +505,45 @@
 
     .btn-browse:hover { background: var(--border-strong); }
 
+    .browse-modal {
+      width: 500px;
+      max-width: 90vw;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .browse-path {
+      padding: 8px 12px;
+      background: var(--bg-secondary);
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--text-faint);
+      margin-bottom: 12px;
+      word-break: break-all;
+    }
+
+    .browse-list {
+      flex: 1;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg-secondary);
+      margin-bottom: 12px;
+    }
+
+    .browse-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      color: var(--accent-text);
+      transition: background 0.1s;
+    }
+
+    .browse-item:hover { background: var(--border); }
+    .browse-item:last-child { border-bottom: none; }
+    .browse-item-selected { background: var(--accent); color: var(--bg); }
+
     #history-toggle {
       margin-top: 6px;
       font-size: 12px;
@@ -1053,6 +1092,20 @@
           </div>
           <div class="conv-messages" id="conv-messages"></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Directory browser modal -->
+  <div id="browse-modal-overlay" class="modal-overlay" style="display: none;">
+    <div class="modal browse-modal">
+      <h2>Select Project Directory</h2>
+      <div class="browse-path" id="browse-path">/</div>
+      <div class="browse-list" id="browse-list"></div>
+      <div class="form-actions">
+        <input type="text" id="browse-manual" placeholder="Or type path manually" style="flex:1; padding: 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-secondary); color: var(--text);" />
+        <button class="btn-cancel" onclick="closeBrowseModal()">Cancel</button>
+        <button class="btn-primary" onclick="confirmBrowseSelection()">Select</button>
       </div>
     </div>
   </div>
