@@ -52,29 +52,58 @@ function getTerminalTheme() {
 }
 
 function applyTerminalTheme() {
-  if (currentTerm) currentTerm.options.theme = getTerminalTheme();
+  const theme = getTerminalTheme();
+  for (const entry of termCache.values()) {
+    if (entry.term) entry.term.options.theme = theme;
+  }
 }
+
+// Per-session terminal state — terminals are kept alive when switching sessions
+// so scroll history and screen content are preserved.
+const termCache = new Map();
+// sessionId -> { term, ws, fitAddon, el, reconnectTimer, resizeObserver }
 
 let currentTerm = null;
 let currentWs = null;
 let currentSessionId = null;
-let reconnectTimer = null;
 
 function openTerminal(session) {
-  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-  if (currentTerm) { currentTerm.dispose(); currentTerm = null; }
-  if (currentWs) { currentWs.close(); currentWs = null; }
-
-  currentSessionId = session.id;
-
   const container = document.getElementById('terminal-container');
-  container.innerHTML = '';
 
-  const header = document.getElementById('terminal-header');
-  header.style.display = 'flex';
+  document.getElementById('terminal-header').style.display = 'flex';
   document.getElementById('slash-toolbar').style.display = 'flex';
   document.getElementById('terminal-dir').textContent = `${session.name}  —  ${session.dir}`;
   updateStatusBadge(session.status);
+
+  // Hide all cached session elements
+  for (const cached of termCache.values()) {
+    if (cached.el) cached.el.style.display = 'none';
+  }
+
+  // Reuse an existing terminal for this session
+  if (termCache.has(session.id)) {
+    const cached = termCache.get(session.id);
+    cached.el.style.display = 'block';
+    currentTerm = cached.term;
+    currentWs = cached.ws;
+    currentSessionId = session.id;
+    setTimeout(() => {
+      cached.fitAddon.fit();
+      if (cached.ws && cached.ws.readyState === WebSocket.OPEN) {
+        cached.ws.send(JSON.stringify({ type: 'resize', cols: cached.term.cols, rows: cached.term.rows }));
+      }
+    }, 0);
+    return;
+  }
+
+  currentSessionId = session.id;
+
+  const emptyState = document.getElementById('empty-state');
+  if (emptyState) emptyState.remove();
+
+  const el = document.createElement('div');
+  el.style.cssText = 'height:100%;width:100%;';
+  container.appendChild(el);
 
   const term = new Terminal({
     theme: getTerminalTheme(),
@@ -87,35 +116,46 @@ function openTerminal(session) {
 
   const fitAddon = new FitAddon.FitAddon();
   term.loadAddon(fitAddon);
-  term.open(container);
+  term.open(el);
+
+  const entry = { term, ws: null, fitAddon, el, reconnectTimer: null, resizeObserver: null };
+  termCache.set(session.id, entry);
+
+  currentTerm = term;
+  currentWs = null;
 
   setTimeout(() => fitAddon.fit(), 0);
 
-  currentTerm = term;
-
   term.onData((data) => {
-    if (currentWs && currentWs.readyState === WebSocket.OPEN) {
-      currentWs.send(JSON.stringify({ type: 'input', data }));
+    const e = termCache.get(session.id);
+    if (e && e.ws && e.ws.readyState === WebSocket.OPEN) {
+      e.ws.send(JSON.stringify({ type: 'input', data }));
     }
   });
 
   const resizeObserver = new ResizeObserver(() => {
     fitAddon.fit();
-    if (currentWs && currentWs.readyState === WebSocket.OPEN) {
-      currentWs.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+    const e = termCache.get(session.id);
+    if (e && e.ws && e.ws.readyState === WebSocket.OPEN) {
+      e.ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
     }
   });
-  resizeObserver.observe(container);
+  resizeObserver.observe(el);
+  entry.resizeObserver = resizeObserver;
 
   connectWs(session, term, fitAddon);
 }
 
 function connectWs(session, term, fitAddon) {
-  if (currentSessionId !== session.id) return;
+  const entry = termCache.get(session.id);
+  if (!entry) return;
 
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${protocol}//${location.host}/ws/${session.id}`);
-  currentWs = ws;
+
+  entry.ws = ws;
+  if (currentSessionId === session.id) currentWs = ws;
+
   let firstOutputReceived = false;
 
   ws.onopen = () => {
@@ -130,8 +170,6 @@ function connectWs(session, term, fitAddon) {
         term.write(msg.data);
         if (!firstOutputReceived) {
           firstOutputReceived = true;
-          // After Claude's TUI has rendered its first frame, inject any pending prompt
-          // (e.g. queued by a template launch). 400ms gives the prompt input time to mount.
           if (typeof pendingPromptBySession !== 'undefined' && pendingPromptBySession.has(session.id)) {
             const queued = pendingPromptBySession.get(session.id);
             pendingPromptBySession.delete(session.id);
@@ -143,21 +181,41 @@ function connectWs(session, term, fitAddon) {
           }
         }
       } else if (msg.type === 'exit') {
-        updateStatusBadge('exited');
+        if (currentSessionId === session.id) updateStatusBadge('exited');
         updateSidebarStatus(session.id, 'exited');
       } else if (msg.type === 'restarted') {
-        updateStatusBadge('running');
+        if (currentSessionId === session.id) updateStatusBadge('running');
         updateSidebarStatus(session.id, 'running');
       }
     } catch (_) {}
   };
 
   ws.onclose = () => {
-    if (currentSessionId !== session.id) return;
-    reconnectTimer = setTimeout(() => connectWs(session, term, fitAddon), 2000);
+    if (!termCache.has(session.id)) return;
+    const e = termCache.get(session.id);
+    e.reconnectTimer = setTimeout(() => {
+      if (termCache.has(session.id)) connectWs(session, term, fitAddon);
+    }, 2000);
   };
 
   ws.onerror = () => ws.close();
+}
+
+// Called when a session is permanently removed
+function disposeTerminal(sessionId) {
+  const entry = termCache.get(sessionId);
+  if (!entry) return;
+  if (entry.reconnectTimer) clearTimeout(entry.reconnectTimer);
+  if (entry.ws) { entry.ws.onclose = null; entry.ws.close(); }
+  if (entry.resizeObserver) entry.resizeObserver.disconnect();
+  if (entry.term) entry.term.dispose();
+  if (entry.el && entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
+  termCache.delete(sessionId);
+  if (currentSessionId === sessionId) {
+    currentTerm = null;
+    currentWs = null;
+    currentSessionId = null;
+  }
 }
 
 function sendSlash(cmd) {
