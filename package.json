@@ -1,8 +1,22 @@
 {
   "name": "claude-code-control",
   "version": "1.0.0",
-  "description": "Web UI for managing multiple Claude Code CLI sessions",
+  "description": "Web UI for managing multiple Claude Code CLI sessions simultaneously",
   "main": "server/index.js",
+  "author": "Udit Jaiswal",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fl-udit/claude-code-control.git"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "ai",
+    "terminal",
+    "session-manager"
+  ],
   "scripts": {
     "start": "node server/index.js",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true"

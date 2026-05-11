@@ -2,11 +2,9 @@
 
 A local web UI for managing multiple [Claude Code](https://claude.ai/code) CLI sessions from a single browser tab.
 
-Run several Claude agents across different projects simultaneously, send prompts, track token usage, and review conversation history — all without juggling terminal windows.
+Run several Claude agents across different projects simultaneously, switch between them instantly, and launch sessions from saved templates — all without juggling terminal windows.
 
 ![Claude Code Control screenshot](docs/screenshot.png)
-
-> **Note:** Add a screenshot at `docs/screenshot.png` before publishing.
 
 ---
 
@@ -14,13 +12,14 @@ Run several Claude agents across different projects simultaneously, send prompts
 
 - **Multiple sessions** — spawn and manage Claude Code processes across different project directories, each in its own terminal
 - **Session persistence** — sessions survive server restarts and are restored as "exited" with their last terminal output intact
+- **Template launchers (⌘K)** — save project + prompt pairs and launch them with one click; reuses an existing session if one is already running in that directory
 - **Slash command toolbar** — one-click shortcuts for `/compact`, `/clear`, `/model`, `/ultraplan`
-- **Prompt bar** — send prompts directly without clicking into the terminal; includes quick-prompt snippets
 - **Conversation viewer** — browse the full chat history from Claude's JSONL logs in a side panel with collapsible tool calls
 - **Token usage** — per-session and global token counts refreshed every 10 seconds
 - **Session discovery** — automatically detects running `claude` processes not managed by the app and lets you import them
 - **Session history** — resume any past Claude session by UUID from the new session modal
 - **Auto-restart** — toggle per-session to automatically respawn Claude with `--continue` when it exits
+- **Light/dark mode** — toggle in the header, preference saved to localStorage
 - **Native folder picker** — macOS folder dialog for selecting project directories
 
 ---
@@ -36,7 +35,7 @@ Run several Claude agents across different projects simultaneously, send prompts
 ## Installation
 
 ```bash
-git clone https://github.com/your-org/claude-code-control.git
+git clone https://github.com/fl-udit/claude-code-control.git
 cd claude-code-control
 npm install
 ```
@@ -67,20 +66,31 @@ Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
 | Action | How |
 |--------|-----|
-| Switch session | Click session in sidebar, or **Cmd+1**–**9** |
-| New session | **Cmd+N** |
+| Switch session | Click session in sidebar |
+| Cycle sessions | **⌥[** / **⌥]** |
+| Focus session search | **⌘/** then **↑↓** to navigate, **Enter** to select |
+| New session | **+ New** button |
 | Stop (keep history) | **×** on a running session |
 | Remove entirely | **×** on an exited session |
 | Restart | **↻** on an exited session |
 | Auto-restart | **↺** toggle — respawns with `--continue` on exit |
-| Send a prompt | Type in the prompt bar and press **Enter** |
 | View chat history | **Chat** button in the terminal header |
+
+### Template launchers
+
+Press **⌘K** to open the command palette. Templates are saved project + prompt pairs:
+
+- **Launch** — click a template (or select with **↑↓** and press **Enter**) to open a session in that project directory and auto-send the prompt
+- **Reuse** — if a session for that directory is already running, the prompt is sent into it instead of spawning a new one
+- **Create/edit** — click **+ New template** in the palette footer, or hover a row and click **✎**
+- **Delete** — hover a row and click **×**, or select a row and press **⌫**
 
 ### Session data
 
 Token usage and conversation history are read directly from Claude Code's local JSONL logs at `~/.claude/projects/`. No data is sent anywhere — everything stays on your machine.
 
-App session state is stored at `~/.claude-code-control/sessions.json`.
+App session state is stored at `~/.claude-code-control/sessions.json`.  
+Templates are stored at `~/.claude-code-control/templates.json`.
 
 ---
 
@@ -92,10 +102,11 @@ claude-code-control/
 │   ├── index.js          # Express + WebSocket server
 │   ├── api.js            # REST endpoints
 │   ├── pty-manager.js    # node-pty process lifecycle
-│   └── session-store.js  # In-memory store with JSON persistence
+│   ├── session-store.js  # In-memory store with JSON persistence
+│   └── template-store.js # Global template CRUD + migration
 └── client/
     ├── index.html        # UI + all CSS (no build step)
-    ├── app.js            # Session list, stats, modal, conversation viewer
+    ├── app.js            # Session list, stats, modals, template palette
     └── terminal.js       # xterm.js terminal + WebSocket relay
 ```
 
@@ -139,14 +150,8 @@ npm start
 
 There is no test suite yet. Adding one is a good first contribution.
 
-**Planned features** (tracked in issues):
-- Dollar cost display per session
-- Keyboard shortcuts (Cmd+N/W/K/1–9)
-- Git branch badge in terminal header
-- Session search/filter in sidebar
-
 ---
 
 ## License
 
-MIT
+MIT © [Udit Jaiswal](https://github.com/fl-udit)
