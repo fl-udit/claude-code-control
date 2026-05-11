@@ -50,12 +50,20 @@ async function loadSessions() {
   }
 }
 
+function sortSessions(list) {
+  return list.slice().sort((a, b) => {
+    const rank = s => (s.status === 'running' ? 0 : s.status === 'starting' ? 1 : 2);
+    return rank(a) - rank(b);
+  });
+}
+
 function getFilteredSessions() {
-  return sessionFilter
+  const base = sessionFilter
     ? sessions.filter(s =>
         s.name.toLowerCase().includes(sessionFilter) ||
         s.dir.toLowerCase().includes(sessionFilter))
     : sessions.slice();
+  return sortSessions(base);
 }
 
 function focusSessionSearch() {
@@ -77,11 +85,7 @@ function renderSidebar() {
   const list = document.getElementById('session-list');
   list.innerHTML = '';
 
-  const visible = sessionFilter
-    ? sessions.filter(s =>
-        s.name.toLowerCase().includes(sessionFilter) ||
-        s.dir.toLowerCase().includes(sessionFilter))
-    : sessions;
+  const visible = getFilteredSessions();
 
   for (const session of visible) {
     const item = document.createElement('div');
@@ -183,14 +187,18 @@ async function removeSession(id) {
   sessions = sessions.filter(s => s.id !== id);
   delete sessionStats[id];
   pendingPromptBySession.delete(id);
+  if (typeof disposeTerminal === 'function') disposeTerminal(id);
   if (activeSessionId === id) {
     activeSessionId = null;
     document.getElementById('terminal-header').style.display = 'none';
     document.getElementById('slash-toolbar').style.display = 'none';
     document.getElementById('prompt-bar').style.display = 'none';
     closeConversationPanel();
-    document.getElementById('terminal-container').innerHTML =
-      '<div class="empty-state" id="empty-state"><div class="icon">⌗</div><p>No session selected</p><button class="btn-primary" onclick="openNewModal()">+ New Session</button></div>';
+    const emptyState = document.createElement('div');
+    emptyState.className = 'empty-state';
+    emptyState.id = 'empty-state';
+    emptyState.innerHTML = '<div class="icon">⌗</div><p>No session selected</p><button class="btn-primary" onclick="openNewModal()">+ New Session</button>';
+    document.getElementById('terminal-container').appendChild(emptyState);
   }
   renderSidebar();
 }
