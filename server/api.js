@@ -34,7 +34,6 @@ router.get('/pick-folder', (req, res) => {
 router.get('/browse', (req, res) => {
   let dir = req.query.path || os.homedir();
   try {
-    if (!fs.existsSync(dir)) dir = os.homedir();
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     const dirs = entries
       .filter(e => e.isDirectory())

@@ -50,11 +50,10 @@ async function loadSessions() {
   }
 }
 
+const rankSession = s => (s.status === 'running' ? 0 : s.status === 'starting' ? 1 : 2);
+
 function sortSessions(list) {
-  return list.slice().sort((a, b) => {
-    const rank = s => (s.status === 'running' ? 0 : s.status === 'starting' ? 1 : 2);
-    return rank(a) - rank(b);
-  });
+  return list.slice().sort((a, b) => rankSession(a) - rankSession(b));
 }
 
 function getFilteredSessions() {
@@ -329,6 +328,14 @@ async function refreshStats() {
 let browseCallbackTarget = null;
 let browseCurrentPath = '';
 
+function afterDirSelected(targetId) {
+  if (targetId === 'input-dir') {
+    document.getElementById('input-name').focus();
+    document.getElementById('history-panel').style.display = 'none';
+    loadHistory();
+  }
+}
+
 async function pickFolderNative(targetId) {
   try {
     const res = await fetch('/api/pick-folder');
@@ -342,11 +349,7 @@ async function pickFolderNative(targetId) {
     const { path } = await res.json();
     if (path) {
       document.getElementById(targetId).value = path;
-      if (targetId === 'input-dir') {
-        document.getElementById('input-name').focus();
-        document.getElementById('history-panel').style.display = 'none';
-        loadHistory();
-      }
+      afterDirSelected(targetId);
     }
   } catch {
     browseCallbackTarget = targetId;
@@ -379,13 +382,21 @@ async function browseTo(dir) {
     browseCurrentPath = path;
     document.getElementById('browse-path').textContent = path;
     const list = document.getElementById('browse-list');
-    list.innerHTML = dirs.map(d => `
-      <div class="browse-item" onclick="browseTo('${d.path.replace(/'/g, "\\'")}')">
-        📁 ${d.name}
-      </div>
-    `).join('');
+    list.innerHTML = '';
+    for (const d of dirs) {
+      const item = document.createElement('div');
+      item.className = 'browse-item';
+      item.textContent = '📁 ' + d.name;
+      item.addEventListener('click', () => browseTo(d.path));
+      list.appendChild(item);
+    }
   } catch (err) {
-    document.getElementById('browse-list').innerHTML = `<div style="padding: 12px; color: var(--text-faint);">${err.message}</div>`;
+    const list = document.getElementById('browse-list');
+    list.innerHTML = '';
+    const msg = document.createElement('div');
+    msg.style.cssText = 'padding:12px;color:var(--text-faint)';
+    msg.textContent = err.message;
+    list.appendChild(msg);
   }
 }
 
@@ -397,11 +408,7 @@ function confirmBrowseSelection() {
     document.getElementById(browseCallbackTarget).value = selected;
   }
   closeBrowseModal();
-  if (browseCallbackTarget === 'input-dir') {
-    document.getElementById('input-name').focus();
-    document.getElementById('history-panel').style.display = 'none';
-    loadHistory();
-  }
+  afterDirSelected(browseCallbackTarget);
 }
 
 function openNewModal() {

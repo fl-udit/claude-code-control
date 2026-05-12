@@ -124,7 +124,7 @@ function openTerminal(session) {
   currentTerm = term;
   currentWs = null;
 
-  setTimeout(() => fitAddon.fit(), 0);
+  requestAnimationFrame(() => fitAddon.fit());
 
   term.onData((data) => {
     const e = termCache.get(session.id);
