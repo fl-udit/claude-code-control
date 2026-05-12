@@ -3,7 +3,7 @@ const path = require('path');
 const os = require('os');
 const { v4: uuidv4 } = require('uuid');
 
-const DATA_DIR = path.join(os.homedir(), '.claude-code-control');
+const DATA_DIR = process.env.DATA_DIR || path.join(os.homedir(), '.claude-code-control');
 const GLOBAL_FILE = path.join(DATA_DIR, 'templates.json');
 const LEGACY_DIR = path.join(DATA_DIR, 'templates');
 

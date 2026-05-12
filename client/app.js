@@ -329,16 +329,41 @@ async function refreshStats() {
 let browseCallbackTarget = null;
 let browseCurrentPath = '';
 
+async function pickFolderNative(targetId) {
+  try {
+    const res = await fetch('/api/pick-folder');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (err.error === 'cancelled') return;
+      browseCallbackTarget = targetId;
+      openBrowseModal();
+      return;
+    }
+    const { path } = await res.json();
+    if (path) {
+      document.getElementById(targetId).value = path;
+      if (targetId === 'input-dir') {
+        document.getElementById('input-name').focus();
+        document.getElementById('history-panel').style.display = 'none';
+        loadHistory();
+      }
+    }
+  } catch {
+    browseCallbackTarget = targetId;
+    openBrowseModal();
+  }
+}
+
 async function pickFolder() {
-  browseCallbackTarget = 'input-dir';
-  openBrowseModal();
+  await pickFolderNative('input-dir');
 }
 
 async function openBrowseModal() {
   document.getElementById('browse-modal-overlay').style.display = 'flex';
   document.getElementById('browse-manual').value = '';
   browseCurrentPath = '';
-  await browseTo('/');
+  const existingPath = browseCallbackTarget ? (document.getElementById(browseCallbackTarget)?.value.trim() || '') : '';
+  await browseTo(existingPath);
 }
 
 function closeBrowseModal() {
@@ -351,6 +376,7 @@ async function browseTo(dir) {
     const res = await fetch(`/api/browse?path=${encodeURIComponent(dir)}`);
     if (!res.ok) throw new Error('Failed to load directory');
     const { path, dirs } = await res.json();
+    browseCurrentPath = path;
     document.getElementById('browse-path').textContent = path;
     const list = document.getElementById('browse-list');
     list.innerHTML = dirs.map(d => `
@@ -718,7 +744,7 @@ async function launchTemplate(id) {
 
 function sendPromptToActiveSession(prompt, attempt = 0) {
   if (typeof currentWs !== 'undefined' && currentWs && currentWs.readyState === WebSocket.OPEN) {
-    currentWs.send(JSON.stringify({ type: 'input', data: prompt + '\n' }));
+    currentWs.send(JSON.stringify({ type: 'input', data: prompt + '\r' }));
     return;
   }
   if (attempt > 10) return;
@@ -762,8 +788,7 @@ function isTemplateEditorOpen() {
 }
 
 async function pickTemplateDir() {
-  browseCallbackTarget = 'te-dir';
-  openBrowseModal();
+  await pickFolderNative('te-dir');
 }
 
 async function saveTemplate() {
