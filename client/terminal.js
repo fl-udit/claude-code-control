@@ -134,11 +134,14 @@ function openTerminal(session) {
   });
 
   const resizeObserver = new ResizeObserver(() => {
-    fitAddon.fit();
-    const e = termCache.get(session.id);
-    if (e && e.ws && e.ws.readyState === WebSocket.OPEN) {
-      e.ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-    }
+    requestAnimationFrame(() => {
+      if (el.offsetWidth === 0) return;
+      fitAddon.fit();
+      const e = termCache.get(session.id);
+      if (e && e.ws && e.ws.readyState === WebSocket.OPEN) {
+        e.ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+      }
+    });
   });
   resizeObserver.observe(el);
   entry.resizeObserver = resizeObserver;
