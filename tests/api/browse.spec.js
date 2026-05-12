@@ -25,11 +25,9 @@ test.describe('GET /api/browse', () => {
     expect(Array.isArray(body.dirs)).toBeTruthy();
   });
 
-  test('falls back to home dir for non-existent path', async ({ request }) => {
+  test('returns 400 for non-existent path', async ({ request }) => {
     const res = await request.get('/api/browse?path=' + encodeURIComponent('/nonexistent-xyz-abc-999'));
-    expect(res.ok()).toBeTruthy();
-    const body = await res.json();
-    expect(body.path).toBe(os.homedir());
+    expect(res.status()).toBe(400);
   });
 
   test('dirs are sorted alphabetically', async ({ request }) => {
