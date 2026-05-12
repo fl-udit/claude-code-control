@@ -50,11 +50,10 @@ async function loadSessions() {
   }
 }
 
+const rankSession = s => (s.status === 'running' ? 0 : s.status === 'starting' ? 1 : 2);
+
 function sortSessions(list) {
-  return list.slice().sort((a, b) => {
-    const rank = s => (s.status === 'running' ? 0 : s.status === 'starting' ? 1 : 2);
-    return rank(a) - rank(b);
-  });
+  return list.slice().sort((a, b) => rankSession(a) - rankSession(b));
 }
 
 function getFilteredSessions() {
@@ -329,16 +328,45 @@ async function refreshStats() {
 let browseCallbackTarget = null;
 let browseCurrentPath = '';
 
+function afterDirSelected(targetId) {
+  if (targetId === 'input-dir') {
+    document.getElementById('input-name').focus();
+    document.getElementById('history-panel').style.display = 'none';
+    loadHistory();
+  }
+}
+
+async function pickFolderNative(targetId) {
+  try {
+    const res = await fetch('/api/pick-folder');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (err.error === 'cancelled') return;
+      browseCallbackTarget = targetId;
+      openBrowseModal();
+      return;
+    }
+    const { path } = await res.json();
+    if (path) {
+      document.getElementById(targetId).value = path;
+      afterDirSelected(targetId);
+    }
+  } catch {
+    browseCallbackTarget = targetId;
+    openBrowseModal();
+  }
+}
+
 async function pickFolder() {
-  browseCallbackTarget = 'input-dir';
-  openBrowseModal();
+  await pickFolderNative('input-dir');
 }
 
 async function openBrowseModal() {
   document.getElementById('browse-modal-overlay').style.display = 'flex';
   document.getElementById('browse-manual').value = '';
   browseCurrentPath = '';
-  await browseTo('/');
+  const existingPath = browseCallbackTarget ? (document.getElementById(browseCallbackTarget)?.value.trim() || '') : '';
+  await browseTo(existingPath);
 }
 
 function closeBrowseModal() {
@@ -351,15 +379,24 @@ async function browseTo(dir) {
     const res = await fetch(`/api/browse?path=${encodeURIComponent(dir)}`);
     if (!res.ok) throw new Error('Failed to load directory');
     const { path, dirs } = await res.json();
+    browseCurrentPath = path;
     document.getElementById('browse-path').textContent = path;
     const list = document.getElementById('browse-list');
-    list.innerHTML = dirs.map(d => `
-      <div class="browse-item" onclick="browseTo('${d.path.replace(/'/g, "\\'")}')">
-        📁 ${d.name}
-      </div>
-    `).join('');
+    list.innerHTML = '';
+    for (const d of dirs) {
+      const item = document.createElement('div');
+      item.className = 'browse-item';
+      item.textContent = '📁 ' + d.name;
+      item.addEventListener('click', () => browseTo(d.path));
+      list.appendChild(item);
+    }
   } catch (err) {
-    document.getElementById('browse-list').innerHTML = `<div style="padding: 12px; color: var(--text-faint);">${err.message}</div>`;
+    const list = document.getElementById('browse-list');
+    list.innerHTML = '';
+    const msg = document.createElement('div');
+    msg.style.cssText = 'padding:12px;color:var(--text-faint)';
+    msg.textContent = err.message;
+    list.appendChild(msg);
   }
 }
 
@@ -371,11 +408,7 @@ function confirmBrowseSelection() {
     document.getElementById(browseCallbackTarget).value = selected;
   }
   closeBrowseModal();
-  if (browseCallbackTarget === 'input-dir') {
-    document.getElementById('input-name').focus();
-    document.getElementById('history-panel').style.display = 'none';
-    loadHistory();
-  }
+  afterDirSelected(browseCallbackTarget);
 }
 
 function openNewModal() {
@@ -718,7 +751,7 @@ async function launchTemplate(id) {
 
 function sendPromptToActiveSession(prompt, attempt = 0) {
   if (typeof currentWs !== 'undefined' && currentWs && currentWs.readyState === WebSocket.OPEN) {
-    currentWs.send(JSON.stringify({ type: 'input', data: prompt + '\n' }));
+    currentWs.send(JSON.stringify({ type: 'input', data: prompt + '\r' }));
     return;
   }
   if (attempt > 10) return;
@@ -762,8 +795,7 @@ function isTemplateEditorOpen() {
 }
 
 async function pickTemplateDir() {
-  browseCallbackTarget = 'te-dir';
-  openBrowseModal();
+  await pickFolderNative('te-dir');
 }
 
 async function saveTemplate() {

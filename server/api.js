@@ -13,10 +13,20 @@ const router = express.Router();
 // ── macOS native folder picker ───────────────────────────────────────────────
 
 router.get('/pick-folder', (req, res) => {
-  execFile('osascript', ['-e', 'POSIX path of (choose folder with prompt "Select project folder:")'], (err, stdout) => {
-    if (err) return res.status(400).json({ error: 'cancelled' });
-    res.json({ path: stdout.trim() });
-  });
+  if (process.platform === 'darwin') {
+    execFile('osascript', ['-e', 'POSIX path of (choose folder with prompt "Select project folder:")'], (err, stdout) => {
+      if (err) return res.status(400).json({ error: 'cancelled' });
+      res.json({ path: stdout.trim() });
+    });
+  } else if (process.platform === 'win32') {
+    const ps = `Add-Type -AssemblyName System.Windows.Forms; $f=New-Object System.Windows.Forms.FolderBrowserDialog; if($f.ShowDialog()-eq'OK'){$f.SelectedPath}else{exit 1}`;
+    execFile('powershell.exe', ['-NonInteractive', '-Command', ps], (err, stdout) => {
+      if (err) return res.status(400).json({ error: 'cancelled' });
+      res.json({ path: stdout.trim() });
+    });
+  } else {
+    res.status(501).json({ error: 'not supported' });
+  }
 });
 
 // ── Directory browser (for Docker/non-macOS environments) ──────────────────────
@@ -24,7 +34,6 @@ router.get('/pick-folder', (req, res) => {
 router.get('/browse', (req, res) => {
   let dir = req.query.path || os.homedir();
   try {
-    if (!fs.existsSync(dir)) dir = os.homedir();
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     const dirs = entries
       .filter(e => e.isDirectory())

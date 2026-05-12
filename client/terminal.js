@@ -87,12 +87,12 @@ function openTerminal(session) {
     currentTerm = cached.term;
     currentWs = cached.ws;
     currentSessionId = session.id;
-    setTimeout(() => {
+    requestAnimationFrame(() => {
       cached.fitAddon.fit();
       if (cached.ws && cached.ws.readyState === WebSocket.OPEN) {
         cached.ws.send(JSON.stringify({ type: 'resize', cols: cached.term.cols, rows: cached.term.rows }));
       }
-    }, 0);
+    });
     return;
   }
 
@@ -124,7 +124,7 @@ function openTerminal(session) {
   currentTerm = term;
   currentWs = null;
 
-  setTimeout(() => fitAddon.fit(), 0);
+  requestAnimationFrame(() => fitAddon.fit());
 
   term.onData((data) => {
     const e = termCache.get(session.id);
@@ -159,8 +159,12 @@ function connectWs(session, term, fitAddon) {
   let firstOutputReceived = false;
 
   ws.onopen = () => {
-    fitAddon.fit();
-    ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+    requestAnimationFrame(() => {
+      fitAddon.fit();
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+      }
+    });
   };
 
   ws.onmessage = (event) => {
@@ -175,9 +179,9 @@ function connectWs(session, term, fitAddon) {
             pendingPromptBySession.delete(session.id);
             setTimeout(() => {
               if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'input', data: queued + '\n' }));
+                ws.send(JSON.stringify({ type: 'input', data: queued + '\r' }));
               }
-            }, 400);
+            }, 2000);
           }
         }
       } else if (msg.type === 'exit') {

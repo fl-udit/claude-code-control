@@ -43,13 +43,10 @@ function spawn(sessionId, dir, flags = []) {
 
   ptys.set(sessionId, ptyProcess);
 
-  const diskBuffer = (() => {
-    try {
-      const p = path.join(BUFFERS_DIR, sessionId);
-      return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
-    } catch (_) { return ''; }
-  })();
-  outputBuffers.set(sessionId, diskBuffer);
+  // Start fresh — replaying saved TUI escape sequences from the old PTY
+  // alongside new output causes garbled rendering (wrong column widths, etc.).
+  // Exited sessions fall back to disk in getBuffer() instead.
+  outputBuffers.set(sessionId, '');
 
   ptyProcess.onData((data) => {
     let buf = (outputBuffers.get(sessionId) || '') + data;
@@ -91,7 +88,13 @@ function isAlive(sessionId) {
 }
 
 function getBuffer(sessionId) {
-  return outputBuffers.get(sessionId) || '';
+  if (outputBuffers.has(sessionId)) return outputBuffers.get(sessionId) || '';
+  // For sessions not currently spawned (exited from a previous run), fall back
+  // to the persisted disk buffer so their last screen state is still replayable.
+  try {
+    const p = path.join(BUFFERS_DIR, sessionId);
+    return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
+  } catch (_) { return ''; }
 }
 
 function clearBuffer(sessionId) {

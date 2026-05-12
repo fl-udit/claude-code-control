@@ -19,7 +19,12 @@
   ],
   "scripts": {
     "start": "node server/index.js",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
   },
   "dependencies": {
     "express": "^4.18.0",
